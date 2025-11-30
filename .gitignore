@@ -1,0 +1,25 @@
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+.vercel/
+
+# Env
+.env
+.env.*
+
+# IDE
+.DS_Store
+.vscode/
+*.local
+
+# Logs
+logs/
+*.log
+**/*.log
+
