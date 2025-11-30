@@ -24,6 +24,7 @@ const Create = () => {
   
   const [uploadedImages, setUploadedImages] = useState<string[]>(formData.images);
   const [isLoading, setIsLoading] = useState(false);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string>('');
 
   // Load templates on mount
   useEffect(() => {
@@ -215,21 +216,32 @@ const Create = () => {
                     type="radio"
                     name="music"
                     value="custom"
-                    checked={formData.musicUrl === 'custom'}
-                    onChange={(e) => setFormData({ ...formData, musicUrl: e.target.value })}
+                    checked={formData.musicUrl !== '' && formData.musicUrl !== 'default'}
+                    onChange={() => setFormData({ ...formData, musicUrl: '' })}
                     className="ml-auto"
                   />
                 </div>
               </div>
             </div>
             
-            {formData.musicUrl === 'custom' && (
+            {formData.musicUrl !== 'default' && (
               <div className="mt-4">
                 <input
                   type="file"
                   accept="audio/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const url = URL.createObjectURL(file);
+                      setFormData({ ...formData, musicUrl: url });
+                      setAudioPreviewUrl(url);
+                    }
+                  }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                 />
+                {audioPreviewUrl && (
+                  <audio src={audioPreviewUrl} controls className="mt-3 w-full" />
+                )}
               </div>
             )}
           </div>
