@@ -36,14 +36,7 @@ const Preview = () => {
     };
   }, [currentProject, navigate]);
 
-  // Revoke previous URL when new URL is set to avoid aborted loads
-  useEffect(() => {
-    return () => {
-      if (videoUrl) {
-        URL.revokeObjectURL(videoUrl);
-      }
-    };
-  }, [videoUrl]);
+  
 
   const generateVideo = async () => {
     if (!currentProject) return;
