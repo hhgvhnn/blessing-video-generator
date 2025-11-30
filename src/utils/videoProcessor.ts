@@ -38,18 +38,23 @@ export const generateBlessingVideo = async (
   try {
     await ffmpeg.createDir('/tmp');
 
+    const imageFiles: string[] = [];
     for (let i = 0; i < images.length; i++) {
       const response = await fetch(images[i]);
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
-      await ffmpeg.writeFile(`/tmp/image${i}.jpg`, new Uint8Array(arrayBuffer));
+      const mime = blob.type || 'image/jpeg';
+      const ext = mime.includes('png') ? 'png' : 'jpg';
+      const fileName = `/tmp/image${i}.${ext}`;
+      await ffmpeg.writeFile(fileName, new Uint8Array(arrayBuffer));
+      imageFiles.push(fileName);
     }
 
     const duration = Math.max(1, images.length) * 5;
 
     const args: string[] = [];
-    for (let i = 0; i < images.length; i++) {
-      args.push('-loop', '1', '-t', '5', '-i', `/tmp/image${i}.jpg`);
+    for (let i = 0; i < imageFiles.length; i++) {
+      args.push('-loop', '1', '-t', '5', '-i', imageFiles[i]);
     }
 
     if (images.length === 1) {
@@ -82,10 +87,17 @@ export const generateBlessingVideo = async (
 
     // Try to overlay blessing text; if drawtext fails due to fonts, fallback to original video
     let textApplied = true;
+    const escapeDrawtext = (text: string) =>
+      text
+        .replace(/\\/g, '\\\\')
+        .replace(/:/g, '\\:')
+        .replace(/'/g, "\\'")
+        .replace(/\n/g, '\\n');
+    const safeText = escapeDrawtext(blessingText);
     try {
       await ffmpeg.exec([
         '-i', '/tmp/video.mp4',
-        '-vf', `drawtext=text='${blessingText}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-text_w)/2:y=(h-text_h)/2`,
+        '-vf', `drawtext=text='${safeText}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-text_w)/2:y=(h-text_h)/2`,
         '-an', '/tmp/video_text.mp4'
       ]);
     } catch (e) {
