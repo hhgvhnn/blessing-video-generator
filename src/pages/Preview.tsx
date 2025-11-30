@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { useProjectStore } from '@/stores/projectStore';
@@ -10,8 +10,10 @@ const Preview = () => {
   const navigate = useNavigate();
   const { currentProject, videoGeneration, setVideoGeneration, updateVideoProgress } = useProjectStore();
   const [videoUrl, setVideoUrl] = useState<string>('');
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const generatingRef = useRef(false);
 
   useEffect(() => {
     if (!currentProject) {
@@ -19,20 +21,35 @@ const Preview = () => {
       return;
     }
 
-    // Generate video preview
-    generateVideo();
+    // Generate video preview (guard StrictMode double-run)
+    if (!generatingRef.current) {
+      generateVideo();
+    }
 
+    return () => {
+      if (!generatingRef.current) {
+        if (videoUrl) {
+          URL.revokeObjectURL(videoUrl);
+        }
+        cleanupFFmpeg();
+      }
+    };
+  }, [currentProject, navigate]);
+
+  // Revoke previous URL when new URL is set to avoid aborted loads
+  useEffect(() => {
     return () => {
       if (videoUrl) {
         URL.revokeObjectURL(videoUrl);
       }
-      cleanupFFmpeg();
     };
-  }, [currentProject, navigate]);
+  }, [videoUrl]);
 
   const generateVideo = async () => {
     if (!currentProject) return;
 
+    if (generatingRef.current) return;
+    generatingRef.current = true;
     setIsGenerating(true);
     setVideoGeneration({
       progress: 0,
@@ -44,7 +61,7 @@ const Preview = () => {
       await initFFmpeg();
 
       // Generate video with progress tracking
-      const videoBlob = await generateBlessingVideo(
+      const blob = await generateBlessingVideo(
         currentProject.images,
         currentProject.blessing_text,
         currentProject.recipient_name,
@@ -53,8 +70,8 @@ const Preview = () => {
           updateVideoProgress(progress);
         }
       );
-
-      const url = URL.createObjectURL(videoBlob);
+      setVideoBlob(blob);
+      const url = URL.createObjectURL(blob);
       setVideoUrl(url);
       
       setVideoGeneration({
@@ -78,6 +95,7 @@ const Preview = () => {
       });
     } finally {
       setIsGenerating(false);
+      generatingRef.current = false;
     }
   };
 
@@ -105,11 +123,9 @@ const Preview = () => {
   };
 
   const shareVideo = async () => {
-    if (navigator.share && videoUrl) {
+    if (navigator.share && videoBlob) {
       try {
-        const response = await fetch(videoUrl);
-        const blob = await response.blob();
-        const file = new File([blob], 'blessing-video.mp4', { type: 'video/mp4' });
+        const file = new File([videoBlob], 'blessing-video.mp4', { type: 'video/mp4' });
         
         await navigator.share({
           title: '祝福视频',

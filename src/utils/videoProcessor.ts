@@ -2,6 +2,8 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
 
 let ffmpeg: FFmpeg | null = null;
+let isProcessing = false;
+let terminateRequested = false;
 
 export const initFFmpeg = async () => {
   if (ffmpeg) return ffmpeg;
@@ -35,6 +37,8 @@ export const generateBlessingVideo = async (
     }
   });
 
+  // Mark processing BEFORE any await to prevent early termination in cleanup
+  isProcessing = true;
   try {
     await ffmpeg.createDir('/tmp');
 
@@ -131,12 +135,24 @@ export const generateBlessingVideo = async (
   } catch (error) {
     console.error('Video generation error:', error);
     throw error;
+  } finally {
+    isProcessing = false;
+    if (terminateRequested) {
+      if (ffmpeg) {
+        try { ffmpeg.terminate(); } catch {}
+        ffmpeg = null;
+      }
+      terminateRequested = false;
+    }
   }
 };
 
 export const cleanupFFmpeg = () => {
-  if (ffmpeg) {
-    ffmpeg.terminate();
-    ffmpeg = null;
+  if (!ffmpeg) return;
+  if (isProcessing) {
+    terminateRequested = true;
+    return;
   }
+  try { ffmpeg.terminate(); } catch {}
+  ffmpeg = null;
 };
