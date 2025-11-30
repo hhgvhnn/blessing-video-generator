@@ -52,17 +52,51 @@ export const generateBlessingVideo = async (
       args.push('-loop', '1', '-t', '5', '-i', `/tmp/image${i}.jpg`);
     }
 
-    const scales = Array.from({ length: images.length }, (_, i) => `[${i}:v]scale=1280:720,setsar=1[v${i}]`).join(';');
-    const concatInputs = Array.from({ length: images.length }, (_, i) => `[v${i}]`).join('');
-    const filter = `${scales};${concatInputs}concat=n=${images.length}:v=1:a=0,format=yuv420p[v]`;
+    if (images.length === 1) {
+      // Single image case: scale and encode without concat
+      await ffmpeg.exec([
+        ...args,
+        '-filter:v', 'scale=1280:720,setsar=1,format=yuv420p',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-preset', 'medium',
+        '-crf', '23',
+        '/tmp/video.mp4'
+      ]);
+    } else {
+      const scales = Array.from({ length: images.length }, (_, i) => `[${i}:v]scale=1280:720,setsar=1[v${i}]`).join(';');
+      const concatInputs = Array.from({ length: images.length }, (_, i) => `[v${i}]`).join('');
+      const filter = `${scales};${concatInputs}concat=n=${images.length}:v=1:a=0,format=yuv420p[v]`;
 
-    args.push('-filter_complex', filter, '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'medium', '-crf', '23', '/tmp/video.mp4');
+      await ffmpeg.exec([
+        ...args,
+        '-filter_complex', filter,
+        '-map', '[v]',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-preset', 'medium',
+        '-crf', '23',
+        '/tmp/video.mp4'
+      ]);
+    }
 
-    await ffmpeg.exec(args);
-
-    await ffmpeg.exec(['-i', '/tmp/video.mp4', '-vf', `drawtext=text='${blessingText}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-text_w)/2:y=(h-text_h)/2`, '-an', '/tmp/video_text.mp4']);
+    // Try to overlay blessing text; if drawtext fails due to fonts, fallback to original video
+    let textApplied = true;
+    try {
+      await ffmpeg.exec([
+        '-i', '/tmp/video.mp4',
+        '-vf', `drawtext=text='${blessingText}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-text_w)/2:y=(h-text_h)/2`,
+        '-an', '/tmp/video_text.mp4'
+      ]);
+    } catch (e) {
+      console.warn('drawtext failed, using video without text overlay', e);
+      textApplied = false;
+    }
 
     let finalPath = '/tmp/video_text.mp4';
+    if (!textApplied) {
+      finalPath = '/tmp/video.mp4';
+    }
 
     if (musicUrl && musicUrl.length > 0) {
       if (musicUrl === 'default') {
@@ -75,7 +109,7 @@ export const generateBlessingVideo = async (
       }
 
       const musicInput = musicUrl === 'default' ? '/tmp/music.m4a' : '/tmp/music';
-      await ffmpeg.exec(['-i', '/tmp/video_text.mp4', '-i', musicInput, '-c:v', 'copy', '-c:a', 'aac', '-shortest', '/tmp/final.mp4']);
+      await ffmpeg.exec(['-i', finalPath, '-i', musicInput, '-c:v', 'copy', '-c:a', 'aac', '-shortest', '/tmp/final.mp4']);
       finalPath = '/tmp/final.mp4';
     }
 
